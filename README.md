@@ -1,6 +1,9 @@
 # lps_dash
  
 An app for looking at the results of topic modeling on some timecourse data. 
+
+To run: `python app.py`
+
 It has three components:
 * Timecourse topic plot: shows the percent of topics in each tissue over the timecourse
 * Z-score table: shows genes in order of Z-score for a given topic
