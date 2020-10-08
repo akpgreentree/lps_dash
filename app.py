@@ -2,9 +2,6 @@ import dash
 import dash_html_components as html
 import dash_core_components as dcc
 
-import random
-import subprocess
-
 from . import components
 
 class MainApp:
@@ -49,12 +46,5 @@ class MainApp:
         # timecourse_debugger.register()
 
     def main(self):
-        if self.is_local:
-            self.app.run_server(debug=True)
-
-        else:
-            host = subprocess.run(['hostname', '-i'], capture_output = True)
-            host = host.stdout[:-1].decode('utf-8')
-            port = random.randrange(8000, 9000)
-            self.app.run_server(debug = True, port = port, host = host)
+        self.app.run_server(debug=True)
 
