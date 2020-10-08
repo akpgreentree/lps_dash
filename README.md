@@ -2,7 +2,7 @@
  
 An app for looking at the results of topic modeling on some timecourse data. 
 
-To run: `python app.py`
+To run, from the parent directory: `python -m lps_dash`
 
 It has three components:
 * Timecourse topic plot: shows the percent of topics in each tissue over the timecourse
