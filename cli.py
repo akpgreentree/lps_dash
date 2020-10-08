@@ -1,10 +1,10 @@
 import argparse
 from . import app
 
-lps_topic_path = '/project2/nchevrier/projects/cytokines/output/tables/bulkRNAseq/LPS/topics.csv'
-lps_cpm_path = '/project2/nchevrier/projects/cytokines/output/tables/bulkRNAseq/LPS/cpm.gct'
-lps_global_z_path = '/project2/nchevrier/projects/cytokines/output/tables/bulkRNAseq/LPS/topic_Z.csv'
-lps_tissue_z_path = '/project2/nchevrier/projects/cytokines/output/tables/bulkRNAseq/LPS/tissue_topic_Z.csv'
+lps_topic_path = 'lps_dash/data/topics.csv'
+lps_cpm_path = 'lps_dash/data/cpm.gct'
+lps_global_z_path = 'lps_dash/data/topic_Z.csv'
+lps_tissue_z_path = 'lps_dash/data/tissue_topic_Z.csv'
 
 class CLI:
 

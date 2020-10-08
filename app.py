@@ -5,7 +5,6 @@ import dash_core_components as dcc
 import random
 import subprocess
 
-from . import debug_component
 from . import components
 
 class MainApp:
@@ -23,7 +22,6 @@ class MainApp:
                                               self.app, 'Z')
         tissue_z_table = components.TissueGeneTable(tissue_z_path, cpm_plotter,
                                                     self.app, 'Z')
-        timecourse_debugger = debug_component.DebuggerComponent(self.app, 'topic-timecourse', 'clickData')
 
         self.app.layout = html.Div(children = [
             html.Div(
