@@ -436,5 +436,5 @@ class TissueGeneTable(GeneTable):
     def _get_title(self, tissue_topic: Tuple[str, str]) -> html.H2:
         tissue = tissue_topic[0]
         topic = tissue_topic[1]
-        title = html.H2(f'Inner-Tissue Correlation: {topic} in {tissue}')
+        title = html.H2(f'Intra-Tissue Correlation: {topic} in {tissue}')
         return title
