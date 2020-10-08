@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Tuple
 import pandas as pd
 import numpy as np
 import dash 
@@ -29,7 +29,7 @@ topic_palette = ['#F0A3FF', '#0075DC', '#993F00', '#4C005C',
                  '#FFFF00', '#FF5005']
 topic_color_map = {'k' + str(i+1): c for i, c in enumerate(topic_palette)}
 
-organ_palette = ["#FFFF00", "#1CE6FF", "#FF34FF", "#FF4A46", 
+tissue_palette = ["#FFFF00", "#1CE6FF", "#FF34FF", "#FF4A46", 
                  "#008941", "#006FA6", "#A30059", "#FFDBE5",
                  "#7A4900", "#0000A6", "#63FFAC", "#B79762", "#004D43"]
 
@@ -54,11 +54,11 @@ class TopicTimecourse:
         topic_table = topic_table.rename(columns = {'Unnamed: 0': 'sample'})
         
         meta_cols = topic_table['sample'].str.extract(
-            r'(?P<organ>.*)_(?P<timepoint>.*)_(?P<mouse>.*)'
+            r'(?P<tissue>.*)_(?P<timepoint>.*)_(?P<mouse>.*)'
         )
         topic_table = pd.concat([topic_table, meta_cols], axis=1)
         topic_table = topic_table.melt(
-            id_vars = ['sample', 'organ', 'timepoint', 'mouse'],
+            id_vars = ['sample', 'tissue', 'timepoint', 'mouse'],
             var_name = 'topic'
         )
 
@@ -66,7 +66,7 @@ class TopicTimecourse:
         topic_table['topic'] = _order_strings(topic_table['topic'])
 
         topic_mean = (topic_table
-                      .groupby(['organ', 'timepoint', 'topic'])
+                      .groupby(['tissue', 'timepoint', 'topic'])
                       .mean()
                       .reset_index()
                      )
@@ -76,15 +76,15 @@ class TopicTimecourse:
     def _get_fig(self) -> go.Figure:
         fig = px.bar(self.topic_table, 
                      x = 'timepoint', y = 'value', color = 'topic',
-                     custom_data = ['topic', 'organ'],
+                     custom_data = ['tissue', 'topic'],
                      color_discrete_map = topic_color_map,
-                     facet_row = 'organ',
+                     facet_row = 'tissue',
                      facet_row_spacing = 0.01,
                      height = 900,
                      width = 500)
         # clean up facet names
         fig.for_each_annotation(
-            lambda a: a.update(text=a.text.replace("organ=", ""))
+            lambda a: a.update(text=a.text.replace("tissue=", ""))
         )
         return fig
 
@@ -100,8 +100,8 @@ class CPMPlotter:
     
     Attributes:
         cpm: pd.Dataframe - cpm data
-        color_map: Dict[str: str] - map of organs to colors
-        organ_key: html.Ul - html object for organ color key
+        color_map: Dict[str: str] - map of tissues to colors
+        tissue_key: html.Ul - html object for tissue color key
             
     '''
 
@@ -116,45 +116,54 @@ class CPMPlotter:
         cpm_cols['timepoint'] = _order_strings(cpm_cols['timepoint'])
         cpm.columns = pd.MultiIndex.from_frame(cpm_cols)
         
-        cpm = cpm.groupby(['organ', 'timepoint'], axis=1).mean()
+        cpm = cpm.groupby(['tissue', 'timepoint'], axis=1).mean()
         self.cpm = cpm
         
-        organs = np.unique(cpm_cols['organ'])
-        self.color_map = {organ: color 
-                          for organ, color in zip(organs, organ_palette)}
-        self._prep_organ_key()
+        tissues = np.unique(cpm_cols['tissue'])
+        self.color_map = {tissue: color 
+                          for tissue, color in zip(tissues, tissue_palette)}
+        self._prep_tissue_key()
         
-    def _prep_organ_key(self):
+    def _prep_tissue_key(self):
         key = html.Ul(style = {'list-style-type': 'none',
                                'padding-left': 20},
-                      children = [self._key_item(organ) 
-                                  for organ in self.color_map])
-        self.organ_key = key
+                      children = [self._key_item(tissue) 
+                                  for tissue in self.color_map])
+        self.tissue_key = key
         
-    def line_plot(self, gene: str) -> dcc.Graph:
+    def line_plot(self, gene: str, tissue: str = None) -> dcc.Graph:
         '''Makes cpm line plot'''
-        fig = px.line(self.cpm.loc[gene].reset_index(),
+
+        data = self.cpm.loc[gene].reset_index()
+        if tissue is not None:
+            data = data[data['tissue'] == tissue]
+
+        fig = px.line(data,
                       x = 'timepoint',
                       y = gene,
-                      color = 'organ',
+                      color = 'tissue',
                       color_discrete_map = self.color_map,
                       height = 50,
                       width = 250,
                       labels= {'timepoint':'', gene: ''})
         fig.update_xaxes(showticklabels=False)
-        fig.update_yaxes(showticklabels=False)
+        fig.update_yaxes(tickvals = [int(min(data[gene])), 
+                                     int(max(data[gene]))],
+                         exponentformat = 'none',
+                         showexponent = 'all')
         fig.update_layout(margin = dict(l=0, r=0, t=0, b=0),
                           showlegend = False)
         graph = dcc.Graph(figure = fig, 
                           config = {'staticPlot': True})
         return graph
+
     
-    def _key_item(self, organ: str) -> html.Li:
+    def _key_item(self, tissue: str) -> html.Li:
         box = html.Div(style = {'height': 10, 
                                 'width': 10,
-                                'background-color': self.color_map[organ],
+                                'background-color': self.color_map[tissue],
                                 'display': 'inline-block'})
-        item = html.Li([box, organ])
+        item = html.Li([box, tissue])
         return item
         
 
@@ -164,8 +173,8 @@ class GeneTable:
     
     Attributes:
         cpm_plotter: CPMPlotter - plotter for in-table plots
-        pos_scores: Dict - dictionary of positive scores for each tissue
-        neg_scores: Dict - dictionary of negative scores for each tissue
+        pos_scores: Dict - dictionary of positive scores for each tissue/timepoint
+        neg_scores: Dict - dictionary of negative scores for each tissue/timepoint
         _table_controls: html.Div - components for controlling the table      
         ids: Dict - names of various components
         ngenes: int - number of genes displayed at a time
@@ -188,7 +197,6 @@ class GeneTable:
         }
         self._setup_table_controls()
         self.ngenes = 5
-        
 
     def _read_scores(self, score_path: str):
         score_mat = pd.read_csv(score_path)
@@ -236,10 +244,10 @@ class GeneTable:
     
     def get_component(self) -> html.Div:
         title = html.Div(id = self.ids['title'], 
-                         children = self._get_title('k1'))
+                         children = self._get_title(('BM', 'k1')))
         table = html.Div(id = self.ids['table'],
-                         children = self._get_table('k1', 0, True))
-        key = self.cpm_plotter.organ_key
+                         children = self._get_table(('BM', 'k1'), 0, True))
+        key = self.cpm_plotter.tissue_key
         table_key = html.Div(
             style = {'display': 'flex'},
             children = [
@@ -258,51 +266,73 @@ class GeneTable:
         )
         return div
     
-    def _get_title(self, topic: str) -> html.H2:
-        title = html.H2(f'Genes Correlated with {topic}')
+    def _get_title(self, tissue_topic: Tuple[str, str]) -> html.H2:
+        tissue = tissue_topic[0]
+        topic = tissue_topic[1]
+        title = html.H2(f'Global Correlation: {topic} in {tissue}')
         return title
 
-    def _get_table(self, topic: str, start_rank: int, pos: bool) -> html.Table:
-        table = html.Table([
-            self._table_header(),
-            self._table_body(topic, start_rank, pos)
-        ])
+    def _get_table(self, tissue_topic: Tuple[str, str], 
+                   start_rank: int, pos: bool) -> html.Table:
+        table = html.Table(
+            style = {'cellspacing': '0', 'cellpadding': '0'},
+            children = [
+                self._table_header(),
+                self._table_body(tissue_topic, start_rank, pos)
+            ]
+        )
         return table
     
     def _table_header(self) -> html.Thead:
         header = html.Thead([
-            html.Td('rank'), html.Td('gene'), html.Td(self.score_name), html.Td('cpm')
+            html.Td('rank'), 
+            html.Td('gene'), 
+            html.Td(self.score_name),
+            html.Td('cpm'),
+            html.Td('cpm')
         ])
         return header
     
-    def _table_body(self, topic: str, start_rank: int, pos: bool) -> html.Tbody:
-        scores = self.pos_scores[topic] if pos else self.neg_scores[topic]
+    def _table_body(self, tissue_topic: Tuple[str, str], 
+                    start_rank: int, pos: bool) -> html.Tbody:
+        scores = self._get_scores(tissue_topic, pos)
         if start_rank < 0: 
             start_rank = 0
         if start_rank > max(scores.index) - (self.ngenes - 1):
             start_rank = max(scores.index) - (self.ngenes - 1)
             
-        rows = [self._table_row(topic, rank, pos) 
+        rows = [self._table_row(tissue_topic, rank, pos) 
                 for rank in range(start_rank, start_rank + self.ngenes)]
         return html.Tbody(rows)
             
-    def _table_row(self, topic: str, rank: int, pos: bool):
-        scores = self.pos_scores[topic] if pos else self.neg_scores[topic]
+    def _table_row(self, tissue_topic: Tuple[str, str], rank: int, pos: bool):
+        scores = self._get_scores(tissue_topic, pos)
         gene = scores.loc[rank, 'gene']
-        score = scores.loc[rank, topic]
-        plot = self.cpm_plotter.line_plot(gene)
+        score = scores.loc[rank, tissue_topic[1]]
+        all_plot = self.cpm_plotter.line_plot(gene)
+        tissue_plot = self.cpm_plotter.line_plot(gene, tissue_topic[0])
         
         row = html.Tr([
             html.Td(rank),
             html.Td(gene),
-            html.Td(score),
-            html.Td(plot)
+            html.Td('{:.2f}'.format(score)),
+            html.Td(all_plot),
+            html.Td(tissue_plot)
         ])
         return row
 
-    def _topic_from_title(self, title):
+    def _get_scores(self, tissue_topic: Tuple[str, str], pos: bool) -> Dict:
+        if pos:
+            return self.pos_scores[tissue_topic[1]]
+        else:
+            return self.neg_scores[tissue_topic[1]]
+
+    def _tissue_topic_from_title(self, title: str) -> Tuple[str, str]:
         title_str = title['props']['children']
-        return title_str.split()[-1]
+        split = title_str.split()
+        tissue = split[-1]
+        topic = split[-3]
+        return (tissue, topic)
     
     def _rank_from_table(self, table: html.Table):
         body = table['props']['children'][1]
@@ -330,18 +360,19 @@ class GeneTable:
                 raise dash.exceptions.PreventUpdate
             
             trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
-            topic = self._topic_from_title(title)
+            tissue_topic = self._tissue_topic_from_title(title)
             pos = dropdown == 'pos'
             if trigger_id in [self.ids['title'], self.ids['dropdown']]:
-                return self._get_table(topic = topic, start_rank = 0, pos = pos)
+                return self._get_table(tissue_topic = tissue_topic, 
+                                       start_rank = 0, pos = pos)
             
             start_rank = self._rank_from_table(table)
             if trigger_id == self.ids['forward_button']:
-                return self._get_table(topic = topic, 
+                return self._get_table(tissue_topic = tissue_topic, 
                                        start_rank = start_rank + self.ngenes,
                                        pos = pos)
             else:
-                return self._get_table(topic = topic,
+                return self._get_table(tissue_topic = tissue_topic,
                                        start_rank = start_rank - self.ngenes,
                                        pos = pos)
                 
@@ -352,6 +383,58 @@ class GeneTable:
         def update_title(timecourse_click):
             if timecourse_click is None:
                 raise dash.exceptions.PreventUpdate
-            topic = timecourse_click['points'][0]['customdata'][0]
-            return self._get_title(topic)
+            tissue_topic = timecourse_click['points'][0]['customdata']
+            return self._get_title(tissue_topic)
                 
+
+class TissueGeneTable(GeneTable):
+
+    '''Manages the component for a gene table with scores split by tissue.'''
+
+    def __init__(self, score_path: str, cpm_plotter: CPMPlotter, 
+                 app: dash.Dash, score_name: str):
+        super().__init__(score_path, cpm_plotter, app, score_name)
+        self.ids = {
+            'table': f'tissue-{score_name}-gene-table',
+            'title': f'tissue-{score_name}-gene-table-title',
+            'forward_button': f'tissue-{score_name}-forward-button',
+            'back_button': f'tissue-{score_name}-back-button',
+            'dropdown': f'tissue-{score_name}-neg-pos-dropdown'            
+        }
+        self._setup_table_controls()
+
+
+    def _read_scores(self, score_path: str):
+        score_mat = pd.read_csv(score_path)
+        pos_scores = {}
+        neg_scores = {}
+
+        for tissue in np.unique(score_mat['tissue']):
+            for topic in score_mat.columns[2:]:
+                topic_scores = score_mat[['tissue','gene', topic]]
+                topic_scores = topic_scores[topic_scores['tissue'] == tissue]
+                
+                pos_topic = topic_scores[topic_scores[topic] > 0]
+                pos_topic = pos_topic.sort_values(topic, ascending = False)
+                pos_topic = pos_topic.reset_index(drop=True)
+                pos_scores[(tissue, topic)] = pos_topic
+                
+                neg_topic = topic_scores[topic_scores[topic] < 0]
+                neg_topic = neg_topic.sort_values(topic)
+                neg_topic = neg_topic.reset_index(drop=True)
+                neg_scores[(tissue, topic)] = neg_topic
+            
+        self.pos_scores = pos_scores
+        self.neg_scores = neg_scores
+
+    def _get_scores(self, tissue_topic: Tuple[str, str], pos: bool) -> Dict:
+        if pos:
+            return self.pos_scores[tissue_topic]
+        else:
+            return self.neg_scores[tissue_topic]
+
+    def _get_title(self, tissue_topic: Tuple[str, str]) -> html.H2:
+        tissue = tissue_topic[0]
+        topic = tissue_topic[1]
+        title = html.H2(f'Inner-Tissue Correlation: {topic} in {tissue}')
+        return title
